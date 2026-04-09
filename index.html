@@ -147,18 +147,19 @@ async function _sincronizarAgora() {
     aplicarBaixasNFs(); initProcessos(); renderInfoBar(); updateHubKpis();
     try { renderNFDash(); } catch(e){}
     try { renderNFRepo(); } catch(e){}
-    _mostrarStatusSync('🔄 Dados atualizados', 'sync');
+    const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    _mostrarStatusSync('🔄 Dados atualizados às ' + agora, 'sync');
   } catch(e) { console.warn('Polling: erro ao sincronizar', e); }
 }
 
 function _iniciarPollingFallback() {
   if (_pollingInterval) return;
-  // Polling a cada 20s — garante sincronização mesmo sem realtime funcionando
-  _pollingInterval = setInterval(_sincronizarAgora, 20000);
+  // Polling a cada 5s — garante sincronização rápida entre usuários
+  _pollingInterval = setInterval(_sincronizarAgora, 5000);
 }
 
 function _pararPollingFallback() {
-  // Mantém polling rodando como camada de segurança extra
+  // Mantém polling rodando como camada de segurança extra (não para)
 }
 
 function _iniciarRealtimeProcessos() {
@@ -207,7 +208,7 @@ function _iniciarRealtimeProcessos() {
         _supaConectado = true;
         _atualizarBadgeConexao(true);
         _mostrarStatusSync('☁️ Conectado em tempo real', 'ok');
-        _pararPollingFallback(); // realtime funcionando, para polling
+        _iniciarPollingFallback(); // polling sempre ativo como camada extra de sinc
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         _supaConectado = false;
         _atualizarBadgeConexao(false);
