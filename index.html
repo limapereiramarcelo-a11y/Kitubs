@@ -1354,22 +1354,11 @@ tbody td{padding:12px 14px;color:var(--text);vertical-align:middle}
         </div>
         <!-- Limpar -->
         <button id="nf-limpar-btn" onclick="limparNFs()" style="display:none;padding:7px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;font-weight:500">🗑 Limpar</button>
-        <!-- Buscar do EcoDFe -->
-        <button onclick="abrirModalEcoDFe()"
-          style="display:flex;align-items:center;gap:6px;padding:7px 16px;border-radius:8px;
-            border:1.5px solid rgba(16,185,129,0.4);background:rgba(16,185,129,0.08);
-            color:var(--green);font-weight:700;font-size:12px;cursor:pointer;transition:all .15s"
-          onmouseover="this.style.background='rgba(16,185,129,0.18)'"
-          onmouseout="this.style.background='rgba(16,185,129,0.08)'"
-          title="Buscar NFs diretamente do EcoDFe via servidor local">
-          🔄 Buscar do EcoDFe
-        </button>
+
         <!-- Salvar -->
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="badge-conexao-nuvem" style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;white-space:nowrap;transition:all .3s;">🔴 Offline</span>
-          <span class="indicador-nao-exportado" title="Há dados alterados que ainda não foram exportados como arquivo HTML. Clique em 'Salvar sistema' para não perder as alterações ao fechar." style="display:none;align-items:center;gap:5px;background:#fff3cd;border:1.5px solid #f59e0b;color:#92400e;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;cursor:default;animation:piscar-alerta 1.8s ease-in-out infinite;white-space:nowrap;">
-            ⚠️ Não exportado
-          </span>
+
           <button onclick="gerarNovoHTML()" style="display:flex;align-items:center;gap:6px;padding:7px 16px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;font-size:12px;cursor:pointer;transition:all .15s;box-shadow:0 2px 8px rgba(21,101,192,0.25)"
             onmouseover="this.style.background='var(--accent2)'"
             onmouseout="this.style.background='var(--accent)'">
@@ -3954,6 +3943,25 @@ function addProcesso(){
 
   if(!forn){ msg.style.color='var(--red)'; msg.textContent='Selecione um fornecedor.'; return; }
 
+  // ── Verificação de duplicidade do número de NF/Processo para o mesmo fornecedor ──
+  if(nf && nf !== '—' && forn){
+    const fornNorm = _normForn(forn);
+    const nfNorm = String(nf).trim().toUpperCase();
+    const procDup = PROCESSOS.find(proc =>
+      _normForn(proc.forn) === fornNorm &&
+      String(proc.nf||'').trim().toUpperCase() === nfNorm
+    );
+    if(procDup){
+      msg.style.color='var(--red)';
+      msg.textContent = `❌ A nota fiscal "${nf}" já foi cadastrada para este fornecedor.`;
+      alert(`❌ Nota fiscal duplicada!\n\nA NF "${nf}" do fornecedor "${forn}" já está cadastrada no sistema (processo de ${procDup.data ? procDup.data.split('-').reverse().join('/') : '—'}, status: ${procDup.status}).\n\nNão é permitido cadastrar a mesma NF duas vezes para o mesmo fornecedor.`);
+      document.getElementById('proc-nf').focus();
+      document.getElementById('proc-nf').style.borderColor='var(--red)';
+      setTimeout(()=>{ document.getElementById('proc-nf').style.borderColor=''; }, 4000);
+      return;
+    }
+  }
+
   // Data de pagamento obrigatória se status = Processado
   if(status === 'Processado' && !dataPag){
     msg.style.color='var(--red)';
@@ -4034,9 +4042,11 @@ function addProcesso(){
 
 function removeProcesso(id){
   const p = PROCESSOS.find(p=>p.id===id);
-  if(p) auditLog('EXCLUSÃO', 'Processos', `Processo removido: ${p.nf||'—'} — ${p.forn}`,
+  if(!p) return;
+  if(!confirm(`Deseja excluir o processo?\n${p.nf||'—'} — ${p.forn}\nValor: ${R(p.valor)}`)) return;
+  auditLog('EXCLUSÃO', 'Processos', `Processo removido: ${p.nf||'—'} — ${p.forn}`,
     `Valor: ${R(p.valor)} | Status: ${p.status} | Obs: ${p.obs||'—'}`);
-  PROCESSOS = PROCESSOS.filter(p=>p.id!==id);
+  PROCESSOS = PROCESSOS.filter(proc=>proc.id!==id);
   saveProcessos();
   renderProcessos();
   updateHubKpis();
@@ -4193,6 +4203,26 @@ function salvarEdicaoProcesso(id){
 
   if(!forn){ msg.textContent='Selecione um fornecedor.'; return; }
 
+  // ── Verificação de duplicidade do número de NF/Processo para o mesmo fornecedor ──
+  if(nf && nf !== '—' && forn){
+    const fornNorm = _normForn(forn);
+    const nfNorm = String(nf).trim().toUpperCase();
+    const procDup = PROCESSOS.find(proc =>
+      proc.id !== id &&
+      _normForn(proc.forn) === fornNorm &&
+      String(proc.nf||'').trim().toUpperCase() === nfNorm
+    );
+    if(procDup){
+      msg.style.color = 'var(--red)';
+      msg.textContent = `❌ A nota fiscal "${nf}" já foi cadastrada para este fornecedor.`;
+      alert(`❌ Nota fiscal duplicada!\n\nA NF "${nf}" do fornecedor "${forn}" já está cadastrada no sistema (processo de ${procDup.data ? procDup.data.split('-').reverse().join('/') : '—'}, status: ${procDup.status}).\n\nNão é permitido cadastrar a mesma NF duas vezes para o mesmo fornecedor.`);
+      document.getElementById('edit-proc-nf').focus();
+      document.getElementById('edit-proc-nf').style.borderColor='var(--red)';
+      setTimeout(()=>{ document.getElementById('edit-proc-nf').style.borderColor=''; }, 4000);
+      return;
+    }
+  }
+
   // Data de pagamento obrigatória se Processado
   if(status === 'Processado' && !dataPag){
     msg.textContent='📅 Informe a data de pagamento para marcar como Processado.';
@@ -4267,6 +4297,14 @@ function updateStatusProcesso(id, novoStatus){
   const p = PROCESSOS.find(p=>p.id===id);
   if(!p) return;
   const statusAnterior = p.status;
+
+  // Regra: processo já Processado/Pago não pode ser alterado para outro status
+  if(statusAnterior === 'Processado' && novoStatus !== 'Processado'){
+    alert('⚠️ Este processo já foi pago e não pode ter o status alterado.\nUse o botão de edição completa (✏️) ou exclua e cadastre novamente se necessário.');
+    renderProcessos(); // reverte o select visualmente
+    return;
+  }
+
   p.status = novoStatus;
   auditLog('STATUS', 'Processos', `Status alterado: ${p.nf||'—'} — ${p.forn}`,
     `"${statusAnterior}" → "${novoStatus}"`);
@@ -4749,6 +4787,25 @@ aplicarBaixasNFs();
 updateHubKpis();
 renderInfoBar();
 _iniciarSupabase();
+
+// ── LOG DE AUDITORIA — DRAWER ────────────────────────────────
+const AUDIT_KEY = 'kits_ubs_audit_log';
+const AUDIT_MAX = 500;
+
+function _loadAuditLog(){
+  try { return JSON.parse(localStorage.getItem(AUDIT_KEY) || '[]'); } catch(e){ return []; }
+}
+
+function auditLog(tipo, modulo, descricao, detalhe = ''){
+  const log = _loadAuditLog();
+  log.unshift({ ts: new Date().toISOString(), tipo, modulo, descricao, detalhe: detalhe || '' });
+  if(log.length > AUDIT_MAX) log.length = AUDIT_MAX;
+  localStorage.setItem(AUDIT_KEY, JSON.stringify(log));
+  _supaSalvarAuditoria(log);
+  const overlay = document.getElementById('audit-overlay');
+  if(overlay && overlay.style.display !== 'none') renderAuditoria();
+}
+
 auditLog('SISTEMA', 'Sistema', 'Sistema iniciado/aberto');
 goHub();
 
@@ -4806,24 +4863,6 @@ function atualizarMenuInfo(){
 
 // Sobrescreve goHub para usar voltarMenu
 function goHub() { voltarMenu(); }
-
-// ── LOG DE AUDITORIA — DRAWER ────────────────────────────────
-const AUDIT_KEY = 'kits_ubs_audit_log';
-const AUDIT_MAX = 500;
-
-function _loadAuditLog(){
-  try { return JSON.parse(localStorage.getItem(AUDIT_KEY) || '[]'); } catch(e){ return []; }
-}
-
-function auditLog(tipo, modulo, descricao, detalhe = ''){
-  const log = _loadAuditLog();
-  log.unshift({ ts: new Date().toISOString(), tipo, modulo, descricao, detalhe: detalhe || '' });
-  if(log.length > AUDIT_MAX) log.length = AUDIT_MAX;
-  localStorage.setItem(AUDIT_KEY, JSON.stringify(log));
-  _supaSalvarAuditoria(log);
-  const overlay = document.getElementById('audit-overlay');
-  if(overlay && overlay.style.display !== 'none') renderAuditoria();
-}
 
 function abrirDrawerAuditoria(){
   const overlay = document.getElementById('audit-overlay');
