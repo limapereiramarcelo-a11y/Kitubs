@@ -170,6 +170,10 @@ async function _iniciarSupabase() {
     await _supaCarregarAuditoria();
     await _supaCarregarMeta();
     renderInfoBar();
+    updateHubKpis();
+    _supaConectado = true;
+    _atualizarBadgeConexao(true);
+    _mostrarStatusSync('☁️ Conectado — dados sincronizados', 'ok');
     _iniciarRealtimeProcessos();
   } catch(e) {
     console.error('Erro ao iniciar Supabase:', e);
@@ -4696,9 +4700,11 @@ function renderTotalizadores(){
 
 function updateHubKpis(){
   const nTotal = NFS.length;
-  document.getElementById('hub-kpi-notas').textContent = nTotal>0 ? nTotal+' NFs importadas' : 'Importar planilha';
+  const elNotas = document.getElementById('hub-kpi-notas');
+  const elProc  = document.getElementById('hub-kpi-processos');
+  if(elNotas) elNotas.textContent = nTotal>0 ? nTotal+' NFs importadas' : 'Importar planilha';
   const pTotal = PROCESSOS.length;
-  document.getElementById('hub-kpi-processos').textContent = pTotal>0 ? pTotal+' processos' : 'Sem processos';
+  if(elProc)  elProc.textContent  = pTotal>0 ? pTotal+' processos' : 'Sem processos';
 }
 
 // ── TIMESTAMPS DE IMPORTAÇÃO E ATUALIZAÇÃO ───────────────────
