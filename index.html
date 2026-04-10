@@ -4042,24 +4042,7 @@ function addProcesso(){
 
   if(!forn){ msg.style.color='var(--red)'; msg.textContent='Selecione um fornecedor.'; return; }
 
-  // ── Verificação de duplicidade do número de NF/Processo para o mesmo fornecedor ──
-  if(nf && nf !== '—' && forn){
-    const fornNorm = _normForn(forn);
-    const nfNorm = String(nf).trim().toUpperCase();
-    const procDup = PROCESSOS.find(proc =>
-      _normForn(proc.forn) === fornNorm &&
-      String(proc.nf||'').trim().toUpperCase() === nfNorm
-    );
-    if(procDup){
-      msg.style.color='var(--red)';
-      msg.textContent = `❌ A nota fiscal "${nf}" já foi cadastrada para este fornecedor.`;
-      alert(`❌ Nota fiscal duplicada!\n\nA NF "${nf}" do fornecedor "${forn}" já está cadastrada no sistema (processo de ${procDup.data ? procDup.data.split('-').reverse().join('/') : '—'}, status: ${procDup.status}).\n\nNão é permitido cadastrar a mesma NF duas vezes para o mesmo fornecedor.`);
-      document.getElementById('proc-nf').focus();
-      document.getElementById('proc-nf').style.borderColor='var(--red)';
-      setTimeout(()=>{ document.getElementById('proc-nf').style.borderColor=''; }, 4000);
-      return;
-    }
-  }
+  // Número do processo AGSUS pode se repetir — não há validação de duplicidade aqui
 
   // Data de pagamento obrigatória se status = Processado
   if(status === 'Processado' && !dataPag){
@@ -4302,25 +4285,7 @@ function salvarEdicaoProcesso(id){
 
   if(!forn){ msg.textContent='Selecione um fornecedor.'; return; }
 
-  // ── Verificação de duplicidade do número de NF/Processo para o mesmo fornecedor ──
-  if(nf && nf !== '—' && forn){
-    const fornNorm = _normForn(forn);
-    const nfNorm = String(nf).trim().toUpperCase();
-    const procDup = PROCESSOS.find(proc =>
-      proc.id !== id &&
-      _normForn(proc.forn) === fornNorm &&
-      String(proc.nf||'').trim().toUpperCase() === nfNorm
-    );
-    if(procDup){
-      msg.style.color = 'var(--red)';
-      msg.textContent = `❌ A nota fiscal "${nf}" já foi cadastrada para este fornecedor.`;
-      alert(`❌ Nota fiscal duplicada!\n\nA NF "${nf}" do fornecedor "${forn}" já está cadastrada no sistema (processo de ${procDup.data ? procDup.data.split('-').reverse().join('/') : '—'}, status: ${procDup.status}).\n\nNão é permitido cadastrar a mesma NF duas vezes para o mesmo fornecedor.`);
-      document.getElementById('edit-proc-nf').focus();
-      document.getElementById('edit-proc-nf').style.borderColor='var(--red)';
-      setTimeout(()=>{ document.getElementById('edit-proc-nf').style.borderColor=''; }, 4000);
-      return;
-    }
-  }
+  // Número do processo AGSUS pode se repetir — não há validação de duplicidade aqui
 
   // Data de pagamento obrigatória se Processado
   if(status === 'Processado' && !dataPag){
