@@ -5,32 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AgSUS – Kits UBS</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- Firebase SDK -->
-<script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp }
-  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-
-const firebaseConfig = {
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ── FIREBASE CONFIG ───────────────────────────────────────────
+const _fbConfig = {
   apiKey: "AIzaSyDUVHohOt9HFjvoaHwXSoUatSkozBrw6gw",
   authDomain: "agsus-kit-ubs.firebaseapp.com",
   projectId: "agsus-kit-ubs",
   storageBucket: "agsus-kit-ubs.firebasestorage.app",
   messagingSenderId: "563366747413",
-  appId: "1:563366747413:web:d3da2bacd5481b5f53dd1c",
-  measurementId: "G-6E9E7YBE5Q"
+  appId: "1:563366747413:web:d3da2bacd5481b5f53dd1c"
 };
 
-const _app  = initializeApp(firebaseConfig);
-const _db   = getFirestore(_app);
+firebase.initializeApp(_fbConfig);
+const _db = firebase.firestore();
 let _fbConectado = false;
-let _unsubProcessos = null;
-let _unsubNFs = null;
-let _unsubAuditoria = null;
-let _unsubMeta = null;
 
-// ── Status bar (reutilizada do sistema original) ──────────────
-window._mostrarStatusSync = function(msg, tipo) {
+function _mostrarStatusSync(msg, tipo) {
   let el = document.getElementById('supa-status-bar');
   if (!el) {
     el = document.createElement('div');
@@ -45,10 +37,9 @@ window._mostrarStatusSync = function(msg, tipo) {
   el.style.opacity = '1';
   clearTimeout(el._timer);
   if (tipo === 'ok' || tipo === 'info') el._timer = setTimeout(() => { el.style.opacity = '0'; }, 3500);
-};
+}
 
-// ── Badge de conexão ──────────────────────────────────────────
-window._atualizarBadgeConexao = function(conectado) {
+function _atualizarBadgeConexao(conectado) {
   document.querySelectorAll('.badge-conexao-nuvem').forEach(b => {
     b.textContent = conectado ? '☁️ Online' : '🔴 Offline';
     b.style.background  = conectado ? 'rgba(46,125,50,0.12)' : 'rgba(198,40,40,0.12)';
@@ -58,164 +49,160 @@ window._atualizarBadgeConexao = function(conectado) {
     b.title = 'Clique para sincronizar agora';
     b.onclick = async () => {
       b.textContent = '🔄 Sincronizando...';
-      await window._fbCarregarTudo();
-      window._atualizarBadgeConexao(_fbConectado);
+      await _sincronizarAgora();
+      _atualizarBadgeConexao(_fbConectado);
     };
   });
-};
+}
 
-// ── Carregar Processos ────────────────────────────────────────
-window._fbCarregarProcessos = async function() {
+async function _fbCarregarProcessos() {
   try {
-    const snap = await getDoc(doc(_db, 'dados', 'processos'));
-    if (snap.exists() && snap.data().dados) {
-      window.PROCESSOS = snap.data().dados;
-      localStorage.setItem('kits_ubs_processos', JSON.stringify(window.PROCESSOS));
-      window.procIdCounter = window.PROCESSOS.length ? Math.max(...window.PROCESSOS.map(p=>p.id))+1 : 1;
+    const snap = await _db.collection('dados').doc('processos').get();
+    if (snap.exists && snap.data().dados) {
+      PROCESSOS = snap.data().dados;
+      localStorage.setItem('kits_ubs_processos', JSON.stringify(PROCESSOS));
+      procIdCounter = PROCESSOS.length ? Math.max(...PROCESSOS.map(p=>p.id))+1 : 1;
       if(typeof aplicarBaixasNFs==='function') aplicarBaixasNFs();
       if(typeof initProcessos==='function') initProcessos();
       if(typeof renderInfoBar==='function') renderInfoBar();
       if(typeof updateHubKpis==='function') updateHubKpis();
     }
   } catch(e) { console.warn('Firebase: erro ao carregar processos', e); }
-};
+}
 
-// ── Salvar Processos ──────────────────────────────────────────
-window._supaSalvarProcessos = async function() {
+async function _supaSalvarProcessos() {
   try {
-    await setDoc(doc(_db, 'dados', 'processos'), {
-      dados: window.PROCESSOS,
-      atualizado_em: serverTimestamp()
+    await _db.collection('dados').doc('processos').set({
+      dados: PROCESSOS,
+      atualizado_em: firebase.firestore.FieldValue.serverTimestamp()
     });
-    window._mostrarStatusSync('☁️ Sincronizado com a nuvem', 'ok');
+    _mostrarStatusSync('☁️ Sincronizado com a nuvem', 'ok');
     if(typeof marcarDadosExportados==='function') marcarDadosExportados();
   } catch(e) {
-    window._mostrarStatusSync('⚠️ Erro ao sincronizar — verifique a conexão', 'erro');
+    _mostrarStatusSync('⚠️ Erro ao sincronizar — verifique a conexão', 'erro');
     console.error('Firebase: erro ao salvar processos', e);
   }
-};
+}
 
-// ── Carregar NFs ──────────────────────────────────────────────
-window._fbCarregarNFs = async function() {
+async function _fbCarregarNFs() {
   try {
-    const snap = await getDoc(doc(_db, 'dados', 'nfs'));
-    if (snap.exists() && snap.data().dados && snap.data().dados.length) {
-      window.NFS = snap.data().dados;
-      localStorage.setItem('kits_ubs_nfs', JSON.stringify(window.NFS));
-      window.nfIdCounter = window.NFS.length ? Math.max(...window.NFS.map(n=>n.id))+1 : 1;
+    const snap = await _db.collection('dados').doc('nfs').get();
+    if (snap.exists && snap.data().dados && snap.data().dados.length) {
+      NFS = snap.data().dados;
+      localStorage.setItem('kits_ubs_nfs', JSON.stringify(NFS));
+      nfIdCounter = NFS.length ? Math.max(...NFS.map(n=>n.id))+1 : 1;
       if(typeof aplicarBaixasNFs==='function') aplicarBaixasNFs();
       try { if(typeof renderNFDash==='function') renderNFDash(); } catch(e){}
       try { if(typeof renderNFRepo==='function') renderNFRepo(); } catch(e){}
       try { if(typeof updateHubKpis==='function') updateHubKpis(); } catch(e){}
     } else {
-      // Firebase vazio: usa dados pré-carregados e salva
-      if(typeof NFS_PRELOADED !== 'undefined') {
-        window.NFS = NFS_PRELOADED.slice();
-        localStorage.setItem('kits_ubs_nfs', JSON.stringify(window.NFS));
-        window.nfIdCounter = window.NFS.length ? Math.max(...window.NFS.map(n=>n.id))+1 : 1;
-        await window._supaSalvarNFs();
+      if(typeof NFS_PRELOADED !== 'undefined' && NFS_PRELOADED.length) {
+        NFS = NFS_PRELOADED.slice();
+        localStorage.setItem('kits_ubs_nfs', JSON.stringify(NFS));
+        nfIdCounter = NFS.length ? Math.max(...NFS.map(n=>n.id))+1 : 1;
+        await _supaSalvarNFs();
       }
     }
   } catch(e) { console.warn('Firebase: erro ao carregar NFs', e); }
-};
+}
 
-// ── Salvar NFs ────────────────────────────────────────────────
-window._supaSalvarNFs = async function() {
+async function _supaSalvarNFs() {
   try {
-    await setDoc(doc(_db, 'dados', 'nfs'), {
-      dados: window.NFS,
-      atualizado_em: serverTimestamp()
+    await _db.collection('dados').doc('nfs').set({
+      dados: NFS,
+      atualizado_em: firebase.firestore.FieldValue.serverTimestamp()
     });
   } catch(e) { console.error('Firebase: erro ao salvar NFs', e); }
-};
+}
 
-// ── Carregar Auditoria ────────────────────────────────────────
-window._fbCarregarAuditoria = async function() {
+async function _fbCarregarAuditoria() {
   try {
-    const snap = await getDoc(doc(_db, 'dados', 'auditoria'));
-    if (snap.exists() && snap.data().dados) {
+    const snap = await _db.collection('dados').doc('auditoria').get();
+    if (snap.exists && snap.data().dados) {
       localStorage.setItem('kits_ubs_audit_log', JSON.stringify(snap.data().dados));
     }
   } catch(e) { console.warn('Firebase: erro ao carregar auditoria', e); }
-};
+}
 
-// ── Salvar Auditoria ──────────────────────────────────────────
-window._supaSalvarAuditoria = async function(log) {
+async function _supaSalvarAuditoria(log) {
   try {
-    await setDoc(doc(_db, 'dados', 'auditoria'), {
+    await _db.collection('dados').doc('auditoria').set({
       dados: log,
-      atualizado_em: serverTimestamp()
+      atualizado_em: firebase.firestore.FieldValue.serverTimestamp()
     });
   } catch(e) {}
-};
+}
 
-// ── Carregar Meta ─────────────────────────────────────────────
-window._fbCarregarMeta = async function() {
+async function _fbCarregarMeta() {
   try {
-    const snap = await getDoc(doc(_db, 'dados', 'meta'));
-    if (snap.exists() && snap.data().dados) {
+    const snap = await _db.collection('dados').doc('meta').get();
+    if (snap.exists && snap.data().dados) {
       const d = snap.data().dados;
       if (d.ts_importacao) localStorage.setItem('kits_ubs_ts_importacao', d.ts_importacao);
       if (d.ts_atualizacao) localStorage.setItem('kits_ubs_ts_atualizacao', d.ts_atualizacao);
     }
   } catch(e) { console.warn('Firebase: erro ao carregar meta', e); }
-};
+}
 
-// ── Salvar Meta ───────────────────────────────────────────────
-window._supaSalvarMeta = async function(campos) {
+async function _supaSalvarMeta(campos) {
   try {
-    const snap = await getDoc(doc(_db, 'dados', 'meta'));
-    const atual = (snap.exists() && snap.data().dados) ? snap.data().dados : {};
+    const snap = await _db.collection('dados').doc('meta').get();
+    const atual = (snap.exists && snap.data().dados) ? snap.data().dados : {};
     const novo = { ...atual, ...campos };
-    await setDoc(doc(_db, 'dados', 'meta'), {
+    await _db.collection('dados').doc('meta').set({
       dados: novo,
-      atualizado_em: serverTimestamp()
+      atualizado_em: firebase.firestore.FieldValue.serverTimestamp()
     });
   } catch(e) { console.warn('Firebase: erro ao salvar meta', e); }
-};
+}
 
-// ── Realtime: escuta mudanças no Firestore ────────────────────
+async function _sincronizarAgora() {
+  await _fbCarregarProcessos();
+  await _fbCarregarNFs();
+  await _fbCarregarMeta();
+  if(typeof renderInfoBar==='function') renderInfoBar();
+  if(typeof updateHubKpis==='function') updateHubKpis();
+  const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  _mostrarStatusSync('🔄 Dados atualizados às ' + agora, 'sync');
+}
+
 function _iniciarRealtimeFirebase() {
-  // Processos
-  _unsubProcessos = onSnapshot(doc(_db, 'dados', 'processos'), (snap) => {
-    if (!snap.exists() || !snap.data().dados) return;
+  _db.collection('dados').doc('processos').onSnapshot((snap) => {
+    if (!snap.exists || !snap.data().dados) return;
     const novos = snap.data().dados;
-    if (JSON.stringify(novos) === JSON.stringify(window.PROCESSOS)) return;
-    window.PROCESSOS = novos;
-    localStorage.setItem('kits_ubs_processos', JSON.stringify(window.PROCESSOS));
-    window.procIdCounter = window.PROCESSOS.length ? Math.max(...window.PROCESSOS.map(p=>p.id))+1 : 1;
+    if (JSON.stringify(novos) === JSON.stringify(PROCESSOS)) return;
+    PROCESSOS = novos;
+    localStorage.setItem('kits_ubs_processos', JSON.stringify(PROCESSOS));
+    procIdCounter = PROCESSOS.length ? Math.max(...PROCESSOS.map(p=>p.id))+1 : 1;
     if(typeof aplicarBaixasNFs==='function') aplicarBaixasNFs();
     if(typeof initProcessos==='function') initProcessos();
     if(typeof renderInfoBar==='function') renderInfoBar();
     if(typeof updateHubKpis==='function') updateHubKpis();
-    window._mostrarStatusSync('🔄 Processos atualizados por outro usuário', 'sync');
+    _mostrarStatusSync('🔄 Processos atualizados por outro usuário', 'sync');
   }, (err) => { console.warn('Realtime processos erro:', err); });
 
-  // NFs
-  _unsubNFs = onSnapshot(doc(_db, 'dados', 'nfs'), (snap) => {
-    if (!snap.exists() || !snap.data().dados) return;
+  _db.collection('dados').doc('nfs').onSnapshot((snap) => {
+    if (!snap.exists || !snap.data().dados) return;
     const novas = snap.data().dados;
-    if (JSON.stringify(novas) === JSON.stringify(window.NFS)) return;
-    window.NFS = novas;
-    localStorage.setItem('kits_ubs_nfs', JSON.stringify(window.NFS));
+    if (JSON.stringify(novas) === JSON.stringify(NFS)) return;
+    NFS = novas;
+    localStorage.setItem('kits_ubs_nfs', JSON.stringify(NFS));
     if(typeof aplicarBaixasNFs==='function') aplicarBaixasNFs();
     try { if(typeof renderNFDash==='function') renderNFDash(); } catch(e){}
     try { if(typeof renderNFRepo==='function') renderNFRepo(); } catch(e){}
     if(typeof updateHubKpis==='function') updateHubKpis();
-    window._mostrarStatusSync('🔄 NFs atualizadas por outro usuário', 'sync');
+    _mostrarStatusSync('🔄 NFs atualizadas por outro usuário', 'sync');
   }, (err) => { console.warn('Realtime NFs erro:', err); });
 
-  // Auditoria
-  _unsubAuditoria = onSnapshot(doc(_db, 'dados', 'auditoria'), (snap) => {
-    if (!snap.exists() || !snap.data().dados) return;
+  _db.collection('dados').doc('auditoria').onSnapshot((snap) => {
+    if (!snap.exists || !snap.data().dados) return;
     localStorage.setItem('kits_ubs_audit_log', JSON.stringify(snap.data().dados));
     const overlay = document.getElementById('audit-overlay');
     if (overlay && overlay.style.display !== 'none' && typeof renderAuditoria==='function') renderAuditoria();
   }, (err) => { console.warn('Realtime auditoria erro:', err); });
 
-  // Meta
-  _unsubMeta = onSnapshot(doc(_db, 'dados', 'meta'), (snap) => {
-    if (!snap.exists() || !snap.data().dados) return;
+  _db.collection('dados').doc('meta').onSnapshot((snap) => {
+    if (!snap.exists || !snap.data().dados) return;
     const d = snap.data().dados;
     if (d.ts_importacao) localStorage.setItem('kits_ubs_ts_importacao', d.ts_importacao);
     if (d.ts_atualizacao) localStorage.setItem('kits_ubs_ts_atualizacao', d.ts_atualizacao);
@@ -223,40 +210,27 @@ function _iniciarRealtimeFirebase() {
   }, (err) => { console.warn('Realtime meta erro:', err); });
 }
 
-// ── Carregar tudo (usado no botão sincronizar) ────────────────
-window._fbCarregarTudo = async function() {
-  await window._fbCarregarProcessos();
-  await window._fbCarregarNFs();
-  await window._fbCarregarAuditoria();
-  await window._fbCarregarMeta();
-  if(typeof renderInfoBar==='function') renderInfoBar();
-  if(typeof updateHubKpis==='function') updateHubKpis();
-  const agora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  window._mostrarStatusSync('🔄 Dados atualizados às ' + agora, 'sync');
-};
-
-// ── Inicialização principal ───────────────────────────────────
-window._iniciarSupabase = async function() {
-  window._mostrarStatusSync('☁️ Conectando ao Firebase...', 'info');
+async function _iniciarSupabase() {
+  _mostrarStatusSync('☁️ Conectando ao Firebase...', 'info');
   try {
     localStorage.removeItem('kits_ubs_processos');
     localStorage.removeItem('kits_ubs_nfs');
-    await window._fbCarregarProcessos();
-    await window._fbCarregarNFs();
-    await window._fbCarregarAuditoria();
-    await window._fbCarregarMeta();
+    await _fbCarregarProcessos();
+    await _fbCarregarNFs();
+    await _fbCarregarAuditoria();
+    await _fbCarregarMeta();
     if(typeof renderInfoBar==='function') renderInfoBar();
     if(typeof updateHubKpis==='function') updateHubKpis();
     _fbConectado = true;
-    window._atualizarBadgeConexao(true);
-    window._mostrarStatusSync('☁️ Conectado — dados sincronizados', 'ok');
+    _atualizarBadgeConexao(true);
+    _mostrarStatusSync('☁️ Conectado — dados sincronizados', 'ok');
     _iniciarRealtimeFirebase();
   } catch(e) {
     console.error('Erro ao iniciar Firebase:', e);
-    window._mostrarStatusSync('⚠️ Sem conexão — usando dados locais', 'erro');
-    window._atualizarBadgeConexao(false);
+    _mostrarStatusSync('⚠️ Sem conexão — usando dados locais', 'erro');
+    _atualizarBadgeConexao(false);
   }
-};
+}
 </script>
 <style>
 /* ── BACKGROUND / TELA INICIAL ─────────────────────────── */
@@ -887,6 +861,32 @@ tbody td{padding:12px 14px;color:var(--text);vertical-align:middle}
 </style>
 </head>
 <body>
+<!-- ══ TELA DE LOGIN ══ -->
+<div id="tela-login" style="position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#0d2137 0%,#1a3a5c 50%,#0d2137 100%);display:flex;align-items:center;justify-content:center;font-family:Segoe UI,Arial,sans-serif">
+  <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:48px 40px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.5);backdrop-filter:blur(10px)">
+    <div style="text-align:center;margin-bottom:32px">
+      <div style="font-size:42px;margin-bottom:8px">🏥</div>
+      <div style="font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.5px">AgSUS – Kits UBS</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-top:4px">Agência Brasileira de Apoio à Gestão do SUS</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:1px">Senha de acesso</label>
+        <input id="login-senha" type="password" placeholder="Digite sua senha"
+          onkeydown="if(event.key==='Enter') _fazerLogin()"
+          style="padding:12px 16px;border-radius:10px;border:1.5px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:15px;outline:none;transition:border .2s"
+          onfocus="this.style.borderColor='rgba(21,101,192,0.8)'"
+          onblur="this.style.borderColor='rgba(255,255,255,0.15)'">
+      </div>
+      <div id="login-erro" style="display:none;background:rgba(198,40,40,0.18);border:1px solid rgba(198,40,40,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:#ff6b6b;text-align:center">❌ Senha incorreta. Tente novamente.</div>
+      <button onclick="_fazerLogin()"
+        style="padding:13px;border-radius:10px;border:none;background:linear-gradient(135deg,#1565C0,#1976D2);color:#fff;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;box-shadow:0 4px 15px rgba(21,101,192,0.4)"
+        onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(21,101,192,0.5)'"
+        onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 15px rgba(21,101,192,0.4)'">Entrar</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- ══════════════════════════════════════════════════════ -->
 <!--  TELA INICIAL — Background + Menu                      -->
@@ -2907,7 +2907,7 @@ function handleNFFile(file){
       // Acumula — adiciona somente as novas
       NFS = [...NFS, ...nfsNovas];
       localStorage.setItem('kits_ubs_nfs', JSON.stringify(NFS));
-      window._supaSalvarNFs();
+      _supaSalvarNFs();
       registrarImportacao();
       auditLog('IMPORTAÇÃO', 'NFs', `Planilha importada: ${file.name}`,
         `${nfsNovas.length} NF(s) novas adicionadas` +
@@ -2980,7 +2980,7 @@ function limparNFs(){
   const qtd = NFS.length;
   NFS = [];
   localStorage.removeItem('kits_ubs_nfs');
-  window._supaSalvarNFs();
+  _supaSalvarNFs();
   auditLog('EXCLUSÃO', 'NFs', `Todas as NFs removidas`, `${qtd} nota(s) excluída(s)`);
   document.getElementById('nf-upload-status').textContent = '';
   document.getElementById('nf-limpar-btn').style.display='none';
@@ -3466,6 +3466,9 @@ function exportarStatusHTML(){
     .footer{font-size:11px;color:#aaa;margin-top:20px}
     @media print{body{margin:20px}}
   </style></head><body>
+<!-- ══ TELA DE LOGIN ══ -->
+
+
   <h1>📊 Relatório por Status – NFs Kits UBS</h1>
   <div class="sub">Gerado em ${dataHoje} &nbsp;·&nbsp; AgSUS Sistema de Gestão</div>
   <table>
@@ -3882,7 +3885,7 @@ window.addEventListener('beforeunload', function(e) {
   }
 });
 
-// PROCESSOS: inicializa do localStorage (cache local). O Supabase sobrescreve logo na inicialização via window._iniciarSupabase().
+// PROCESSOS: inicializa do localStorage (cache local). O Supabase sobrescreve logo na inicialização via _iniciarSupabase().
 let PROCESSOS = JSON.parse(localStorage.getItem('kits_ubs_processos') || '[]');
 let procIdCounter = PROCESSOS.length ? Math.max(...PROCESSOS.map(p=>p.id))+1 : 1;
 
@@ -3891,7 +3894,7 @@ function saveProcessos(){
   aplicarBaixasNFs();
   registrarAtualizacao();
   marcarDadosNaoExportados();
-  window._supaSalvarProcessos();
+  _supaSalvarProcessos();
 }
 
 // ── BAIXA AUTOMÁTICA DE NFS ───────────────────────────────────
@@ -3939,7 +3942,7 @@ function aplicarBaixasNFs(){
   });
 
   localStorage.setItem('kits_ubs_nfs', JSON.stringify(NFS));
-  window._supaSalvarNFs();
+  _supaSalvarNFs();
 }
 
 function initProcessos(){
@@ -4842,14 +4845,14 @@ function _fmtDateTime(iso){
 function registrarImportacao(){
   const ts = new Date().toISOString();
   localStorage.setItem('kits_ubs_ts_importacao', ts);
-  window._supaSalvarMeta({ ts_importacao: ts, ts_atualizacao: ts });
+  _supaSalvarMeta({ ts_importacao: ts, ts_atualizacao: ts });
   registrarAtualizacao();
 }
 
 function registrarAtualizacao(){
   const ts = new Date().toISOString();
   localStorage.setItem('kits_ubs_ts_atualizacao', ts);
-  window._supaSalvarMeta({ ts_atualizacao: ts });
+  _supaSalvarMeta({ ts_atualizacao: ts });
   renderInfoBar();
 }
 
@@ -4871,7 +4874,75 @@ initProcessos();
 aplicarBaixasNFs();
 updateHubKpis();
 renderInfoBar();
-window._iniciarSupabase();
+
+// ── LOGIN ─────────────────────────────────────────────────────
+const _SENHAS = { 'Ags@2026': 'admin', 'Kits@view': 'viewer' };
+let _perfilAtual = null;
+
+function _fazerLogin() {
+  const senha = document.getElementById('login-senha').value;
+  const perfil = _SENHAS[senha];
+  if (!perfil) {
+    const erroEl = document.getElementById('login-erro');
+    erroEl.style.display = 'block';
+    document.getElementById('login-senha').value = '';
+    document.getElementById('login-senha').focus();
+    setTimeout(() => { erroEl.style.display = 'none'; }, 3000);
+    return;
+  }
+  _perfilAtual = perfil;
+  sessionStorage.setItem('agsus_perfil', perfil);
+  document.getElementById('tela-login').style.display = 'none';
+  _aplicarPermissoes(perfil);
+  _iniciarSupabase();
+}
+
+function _aplicarPermissoes(perfil) {
+  if (perfil === 'viewer') {
+    const style = document.createElement('style');
+    style.id = 'viewer-style';
+    style.textContent = `
+      button[onclick*="salvar"], button[onclick*="Salvar"],
+      button[onclick*="salvarAlteracoes"], button[onclick*="gerarNovoHTML"],
+      button[onclick*="addProcesso"], button[onclick*="removeProcesso"],
+      button[onclick*="limpar"], button[onclick*="Limpar"],
+      button[onclick*="confirmarImportacao"],
+      #nf-upload-compact, #proc-upload-area,
+      #nf-limpar-btn, #proc-limpar-btn,
+      button[onclick*="habilitarEdicao"],
+      button[onclick*="abrirModalEdicao"],
+      button[onclick*="editarProcesso"],
+      button[onclick*="removeProcesso"],
+      .btn-primary { display:none !important; }
+      select[onchange*="updateStatus"] { pointer-events:none; opacity:0.6; }
+    `;
+    document.head.appendChild(style);
+  }
+  // Mostra badge de perfil
+  const badge = document.createElement('div');
+  badge.style.cssText = 'position:fixed;top:12px;right:12px;z-index:99998;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;font-family:Segoe UI,Arial,sans-serif;' +
+    (perfil === 'admin' ? 'background:rgba(21,101,192,0.15);color:#1565C0;border:1px solid rgba(21,101,192,0.3)' : 'background:rgba(46,125,50,0.15);color:#2E7D32;border:1px solid rgba(46,125,50,0.3)');
+  badge.textContent = perfil === 'admin' ? '👑 Administrador' : '👁 Visualizador';
+  badge.title = 'Clique para sair';
+  badge.style.cursor = 'pointer';
+  badge.onclick = () => { sessionStorage.removeItem('agsus_perfil'); location.reload(); };
+  document.body.appendChild(badge);
+}
+
+// Verifica sessão ao carregar (mantém logado enquanto aba estiver aberta)
+(function _verificarSessao() {
+  const perfil = sessionStorage.getItem('agsus_perfil');
+  if (perfil === 'admin' || perfil === 'viewer') {
+    _perfilAtual = perfil;
+    document.getElementById('tela-login').style.display = 'none';
+    _aplicarPermissoes(perfil);
+  } else {
+    window._aguardandoLogin = true;
+  }
+})();
+
+
+if (!window._aguardandoLogin) _iniciarSupabase();
 
 // ── LOG DE AUDITORIA — DRAWER ────────────────────────────────
 const AUDIT_KEY = 'kits_ubs_audit_log';
@@ -4886,7 +4957,7 @@ function auditLog(tipo, modulo, descricao, detalhe = ''){
   log.unshift({ ts: new Date().toISOString(), tipo, modulo, descricao, detalhe: detalhe || '' });
   if(log.length > AUDIT_MAX) log.length = AUDIT_MAX;
   localStorage.setItem(AUDIT_KEY, JSON.stringify(log));
-  window._supaSalvarAuditoria(log);
+  _supaSalvarAuditoria(log);
   const overlay = document.getElementById('audit-overlay');
   if(overlay && overlay.style.display !== 'none') renderAuditoria();
 }
@@ -4967,7 +5038,7 @@ function fecharDrawerAuditoria(){
 function limparAuditoria(){
   if(!confirm('Apagar todo o histórico de auditoria? Esta ação não pode ser desfeita.')) return;
   localStorage.removeItem(AUDIT_KEY);
-  window._supaSalvarAuditoria([]);
+  _supaSalvarAuditoria([]);
   renderAuditoria();
 }
 
@@ -5233,7 +5304,7 @@ function processarNFsDoServidor(nfsRaw){
   nfsNovasEco.forEach((n,i) => { n.id = NFS.length + i + 1; });
   NFS = [...NFS, ...nfsNovasEco];
   localStorage.setItem('kits_ubs_nfs', JSON.stringify(NFS));
-  window._supaSalvarNFs();
+  _supaSalvarNFs();
   registrarImportacao();
   auditLog('IMPORTAÇÃO', 'NFs', `EcoDFe: ${nfsNovasEco.length} NF(s) novas`,
     dupEco > 0 ? `${dupEco} duplicada(s) ignorada(s)` : '');
