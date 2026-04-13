@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AgSUS – Kits UBS</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- Firebase via CDN (compat version 9.x - compatível com API v8) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script>
@@ -19,40 +18,31 @@ const _fbConfig = {
   appId: "1:563366747413:web:d3da2bacd5481b5f53dd1c"
 };
 
-// Firebase init com proteção
 let _db = null;
 let _fbConectado = false;
 
-// ── FORMATADOR DE MOEDA R$() ──────────────────────────────────
+// ── FORMATADOR DE MOEDA R$() ────────────────────────────
 function R(v) {
   const n = parseFloat(v) || 0;
   return 'R$\u00a0' + n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
+
+// Inicializa Firebase — chamado diretamente pelo _iniciarSupabase
 function _initFirebase() {
-  if (typeof firebase !== 'undefined') {
-    try {
-      if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(_fbConfig);
-      _db = firebase.firestore();
-    } catch(e) { console.warn('Firebase init error:', e.message); }
-  } else {
-    console.warn('Firebase SDK não carregado — modo local ativado.');
+  if (typeof firebase === 'undefined') {
+    console.warn('Firebase SDK n\u00e3o carregado \u2014 modo local ativado.');
+    return false;
+  }
+  try {
+    if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(_fbConfig);
+    _db = firebase.firestore();
+    console.log('Firebase inicializado com sucesso.');
+    return true;
+  } catch(e) {
+    console.warn('Firebase init error:', e.message);
+    return false;
   }
 }
-_initFirebase();
-
-// Re-tenta init do Firebase após DOM pronto (caso CDN carregue tardiamente)
-if (!_db) {
-  document.addEventListener('DOMContentLoaded', function() {
-    if (!_db) {
-      _initFirebase();
-      if (_db) {
-        console.log('Firebase inicializado após DOMContentLoaded');
-        _iniciarSupabase().catch(()=>{});
-      }
-    }
-  });
-}
-
 function _mostrarStatusSync(msg, tipo) {
   let el = document.getElementById('supa-status-bar');
   if (!el) {
@@ -320,6 +310,9 @@ function _iniciarRealtimeFirebase() {
 }
 
 async function _iniciarSupabase() {
+  // Garante Firebase inicializado antes de qualquer operacao
+  if (!_db) _initFirebase();
+
   if (!_db) {
     console.warn('Firebase indisponível — carregando cache local.');
     try { var v=localStorage.getItem('kits_ubs_nfs'); if(v){ NFS=JSON.parse(v); nfIdCounter=NFS.length?Math.max(...NFS.map(function(n){return n.id;}))+1:1; } } catch(e){}
@@ -5147,6 +5140,8 @@ function _fazerLogin() {
   sessionStorage.setItem('agsus_perfil', perfil);
   document.getElementById('tela-login').style.display = 'none';
   _aplicarPermissoes(perfil);
+  // Re-inicializa Firebase caso SDK tenha carregado depois do boot
+  if (!_db) _initFirebase();
   _iniciarSupabase();
 }
 
@@ -5191,6 +5186,7 @@ function _aplicarPermissoes(perfil) {
     _perfilAtual = perfil;
     document.getElementById('tela-login').style.display = 'none';
     _aplicarPermissoes(perfil);
+    if (!_db) _initFirebase();
   } else {
     window._aguardandoLogin = true;
   }
